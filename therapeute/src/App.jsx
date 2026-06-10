@@ -112,10 +112,10 @@ const callSerena = async (msgs, p, hist) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-3-5-haiku-latest",
+      model: "claude-3-haiku-20240307",
       max_tokens: 200,
-      system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p} (${PHASES[p].label}).`,
-      messages: cleanMsgs
+      system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p}.`,
+  messages: cleanMsgs
     })
   }, 15000);
 
@@ -130,11 +130,10 @@ const analyzeResponse = async (transcript, p) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-3-5-haiku-latest",
-      max_tokens: 150,
-      system: `Tu es un observateur clinique en thérapie sensorimotrice. Analyse la réponse et réponds UNIQUEMENT avec un JSON valide contenant ces clés : "activation" ("basse|moyenne|haute"), "domaine" ("corporel|émotionnel|cognitif|mixte"), "alerte" (true/false), "note" (1 courte phrase). Pas de markdown.`,
-      messages: [{ role: "user", content: `Réponse de la personne en Phase ${p} : "${transcript}"` }]
-    })
+      model: "claude-3-haiku-20240307",
+      max_tokens: 200,
+      system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p}.`,
+  messages: cleanMsgs
   }, 10000).catch(() => null);
 
   if (!res || !res.ok) return null;
