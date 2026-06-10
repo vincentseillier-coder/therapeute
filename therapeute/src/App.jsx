@@ -98,62 +98,49 @@ export default function App() {
   }, []);
 
   // ── APPELS API CONTOURNEMENT CORS VIA PROXY PUBLIC ─────────────────────────
-  const callSerena = async (msgs, p, hist) => {
-    // Nettoyage pour s'assurer de l'alternance stricte demandée par Anthropic
-    let cleanMsgs = msgs.map(m => ({ role: m.role, content: m.content }));
-    while (cleanMsgs.length > 0 && cleanMsgs[0].role !== "user") {
-      cleanMsgs.shift();
-    }
-    if (cleanMsgs.length === 0) cleanMsgs = [{ role: "user", content: "Bonjour" }];
+// Colles ici l'URL de ton Worker Cloudflare
+const PROXY_URL = "https://serena-proxy.vincentseilliermusic.workers.dev"; 
 
-    const targetUrl = "https://api.anthropic.com/v1/messages";
-    // Utilisation de allorigins pour casser le verrou CORS du navigateur
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+const callSerena = async (msgs, p, hist) => {
+  let cleanMsgs = msgs.map(m => ({ role: m.role, content: m.content }));
+  while (cleanMsgs.length > 0 && cleanMsgs[0].role !== "user") {
+    cleanMsgs.shift();
+  }
+  if (cleanMsgs.length === 0) cleanMsgs = [{ role: "user", content: "Bonjour" }];
 
-    const res = await fetchWithTimeout(proxyUrl, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json", 
-        "x-api-key": ANTHROPIC_API_KEY, 
-        "anthropic-version": "2023-06-01" 
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
-        max_tokens: 200,
-        system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p} (${PHASES[p].label}). Historique : ${hist.join(" | ")}`,
-        messages: cleanMsgs
-      })
-    }, 12000);
+  const res = await fetchWithTimeout(PROXY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 200,
+      system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p} (${PHASES[p].label}).`,
+      messages: cleanMsgs
+    })
+  }, 15000);
 
-    if (!res.ok) throw new Error("Erreur réseau");
-    const data = await res.json();
-    const raw = data.content?.[0]?.text || "...";
-    return { text: raw.replace("##NEXT##", "").trim(), next: raw.includes("##NEXT##") };
-  };
+  if (!res.ok) throw new Error("Erreur Proxy");
+  const data = await res.json();
+  const raw = data.content?.[0]?.text || "...";
+  return { text: raw.replace("##NEXT##", "").trim(), next: raw.includes("##NEXT##") };
+};
 
-  const analyzeResponse = async (transcript, p) => {
-    const targetUrl = "https://api.anthropic.com/v1/messages";
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+const analyzeResponse = async (transcript, p) => {
+  const res = await fetchWithTimeout(PROXY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 150,
+      system: `Tu es un observateur clinique en thérapie sensorimotrice. Analyse la réponse et réponds UNIQUEMENT avec un JSON valide contenant ces clés : "activation" ("basse|moyenne|haute"), "domaine" ("corporel|émotionnel|cognitif|mixte"), "alerte" (true/false), "note" (1 courte phrase). Pas de markdown.`,
+      messages: [{ role: "user", content: `Réponse de la personne en Phase ${p} : "${transcript}"` }]
+    })
+  }, 10000).catch(() => null);
 
-    const res = await fetchWithTimeout(proxyUrl, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json", 
-        "x-api-key": ANTHROPIC_API_KEY, 
-        "anthropic-version": "2023-06-01" 
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
-        max_tokens: 150,
-        system: `Tu es un observateur clinique en thérapie sensorimotrice. Analyse la réponse et réponds UNIQUEMENT avec un JSON valide contenant ces clés : "activation" ("basse|moyenne|haute"), "domaine" ("corporel|émotionnel|cognitif|mixte"), "alerte" (true/false), "note" (1 courte phrase). Pas de markdown.`,
-        messages: [{ role: "user", content: `Réponse de la personne en Phase ${p} : "${transcript}"` }]
-      })
-    }, 10000).catch(() => null);
-
-    if (!res || !res.ok) return null;
-    const data = await res.json();
-    try { return JSON.parse(data.content[0].text); } catch { return null; }
-  };
+  if (!res || !res.ok) return null;
+  const data = await res.json();
+  try { return JSON.parse(data.content[0].text); } catch { return null; }
+};
 
   // ── SYNTHÈSE VOCALE ────────────────────────────────────────────────────────
   const serenaSpeak = useCallback((text, onDone) => {
