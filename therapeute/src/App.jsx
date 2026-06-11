@@ -108,16 +108,16 @@ const callSerena = async (msgs, p, hist) => {
   }
   if (cleanMsgs.length === 0) cleanMsgs = [{ role: "user", content: "Bonjour" }];
 
-  const res = await fetchWithTimeout(PROXY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 200,
-      system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p}.`,
-  messages: cleanMsgs
-    })
-  }, 15000);
+const res = await fetch(`${PROXY_URL}?t=${Date.now()}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 200,
+    system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p}.`,
+    messages: cleanMsgs
+  })
+});
 
   if (!res.ok) throw new Error("Erreur Proxy");
   const data = await res.json();
@@ -126,15 +126,16 @@ const callSerena = async (msgs, p, hist) => {
 };
 
 const analyzeResponse = async (transcript, p) => {
-  const res = await fetchWithTimeout(PROXY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 200,
-      system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p}.`,
-  messages: cleanMsgs
-  }, 10000).catch(() => null);
+  const res = await fetch(`${PROXY_URL}?t=${Date.now()}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 200,
+    system: `${SYSTEM_BASE}\nSESSION : Phase actuelle = ${p}.`,
+    messages: cleanMsgs
+  })
+});
 
   if (!res || !res.ok) return null;
   const data = await res.json();
