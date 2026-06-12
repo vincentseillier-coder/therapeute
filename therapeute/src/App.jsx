@@ -85,28 +85,6 @@ export default function App() {
   const phaseRef = useRef(phase);
   const messagesRef = useRef(messages);
 
-  // Chargement robuste des voix du navigateur
- useEffect(() => {
-  if (!window.speechSynthesis) return;
-
-  const loadVoices = () => {
-    const voices = window.speechSynthesis.getVoices();
-    // On cherche la voix premium Google ou Microsoft
-    let best = voices.find(v => 
-      v.lang.toLowerCase().includes("fr") && 
-      (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Microsoft"))
-    );
-    // Secours
-    if (!best) best = voices.find(v => v.lang.toLowerCase().includes("fr"));
-    
-    if (best) setSelectedVoice(best);
-  };
-
-  loadVoices();
-  // Pour Chrome/Edge qui chargent les voix de manière asynchrone
-  window.speechSynthesis.onvoiceschanged = loadVoices;
-}, []);
-
   // ── APPELS API CONTOURNEMENT CORS VIA PROXY PUBLIC ─────────────────────────
 // Colles ici l'URL de ton Worker Cloudflare
 const PROXY_URL = "https://serena-proxy.vincentseilliermusic.workers.dev"; 
@@ -154,27 +132,24 @@ const analyzeResponse = async (transcript, p) => {
 
   // ── SYNTHÈSE VOCALE ────────────────────────────────────────────────────────
 const speak = (text) => {
+  console.log("--> GOOGLE TRANSLATE EST APPELÉ !");
+  
   // 1. Nettoyage des astérisques
   const cleanText = text.replace(/\*/g, "");
 
-  // 2. Encodage du texte pour l'URL
-  const encodedText = encodeURIComponent(cleanText);
+  // 2. Création de l'URL Google Translate
+  const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=fr&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
 
-  // 3. Utilisation de l'URL directe du moteur de recherche Google Translate (en français)
-  const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=fr&client=tw-ob&q=${encodedText}`;
-
-  // 4. Lecture immédiate du flux audio
+  // 3. Lecture de l'audio
   const audio = new Audio(audioUrl);
   
-  // Optionnel : stoppe l'ancien audio si un nouveau message arrive
+  // Sécurité pour couper la parole si Serena parlait déjà
   if (window.currentSerenaAudio) {
     window.currentSerenaAudio.pause();
   }
   window.currentSerenaAudio = audio;
 
-  audio.play().catch(err => {
-    console.error("Erreur de lecture vocale :", err);
-  });
+  audio.play().catch(err => console.error("Erreur audio :", err));
 };
 
   // ── TRAITEMENT DE LA PAROLE / TEXTE USER ───────────────────────────────────
