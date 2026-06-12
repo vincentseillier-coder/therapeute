@@ -85,17 +85,27 @@ export default function App() {
   const phaseRef = useRef(phase);
   const messagesRef = useRef(messages);
 
-  useEffect(() => { phaseRef.current = phase; }, [phase]);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
-
   // Chargement robuste des voix du navigateur
-  useEffect(() => {
-    const loadVoices = () => window.speechSynthesis?.getVoices();
-    loadVoices();
-    window.speechSynthesis?.addEventListener("voiceschanged", loadVoices);
-    return () => window.speechSynthesis?.removeEventListener("voiceschanged", loadVoices);
-  }, []);
+ useEffect(() => {
+  if (!window.speechSynthesis) return;
+
+  const loadVoices = () => {
+    const voices = window.speechSynthesis.getVoices();
+    // On cherche la voix premium Google ou Microsoft
+    let best = voices.find(v => 
+      v.lang.toLowerCase().includes("fr") && 
+      (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Microsoft"))
+    );
+    // Secours
+    if (!best) best = voices.find(v => v.lang.toLowerCase().includes("fr"));
+    
+    if (best) setSelectedVoice(best);
+  };
+
+  loadVoices();
+  // Pour Chrome/Edge qui chargent les voix de manière asynchrone
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}, []);
 
   // ── APPELS API CONTOURNEMENT CORS VIA PROXY PUBLIC ─────────────────────────
 // Colles ici l'URL de ton Worker Cloudflare
@@ -143,24 +153,29 @@ const analyzeResponse = async (transcript, p) => {
 };
 
   // ── SYNTHÈSE VOCALE ────────────────────────────────────────────────────────
-  const serenaSpeak = useCallback((text, onDone) => {
-    if (!window.speechSynthesis) { onDone?.(); return; }
-    window.speechSynthesis.cancel();
-    
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "fr-FR"; 
-    u.rate = voiceRate;
-    
-    const voices = window.speechSynthesis.getVoices();
-    const frVoice = voices.find(v => v.lang.startsWith("fr") && /female|femme/i.test(v.name)) || voices.find(v => v.lang.startsWith("fr"));
-    if (frVoice) u.voice = frVoice;
-    
-    u.onstart = () => setSpeaking(true);
-    u.onend = () => { setSpeaking(false); onDone?.(); };
-    u.onerror = () => { setSpeaking(false); onDone?.(); };
-    
-    window.speechSynthesis.speak(u);
-  }, [voiceRate]);
+const speak = (text) => {
+  // 1. Nettoyage des astérisques
+  const cleanText = text.replace(/\*/g, "");
+
+  // 2. Encodage du texte pour l'URL
+  const encodedText = encodeURIComponent(cleanText);
+
+  // 3. Utilisation de l'URL directe du moteur de recherche Google Translate (en français)
+  const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=fr&client=tw-ob&q=${encodedText}`;
+
+  // 4. Lecture immédiate du flux audio
+  const audio = new Audio(audioUrl);
+  
+  // Optionnel : stoppe l'ancien audio si un nouveau message arrive
+  if (window.currentSerenaAudio) {
+    window.currentSerenaAudio.pause();
+  }
+  window.currentSerenaAudio = audio;
+
+  audio.play().catch(err => {
+    console.error("Erreur de lecture vocale :", err);
+  });
+};
 
   // ── TRAITEMENT DE LA PAROLE / TEXTE USER ───────────────────────────────────
   const processUserSpeech = useCallback(async (transcript, via = "voice") => {
